@@ -1,0 +1,44 @@
+name: 金价监控推送
+
+# 每 5 分钟跑一次（GitHub Actions 定时任务，与你的电脑是否开机无关）
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch: {}   # 允许在 Actions 页面手动点「Run workflow」测试
+
+permissions:
+  contents: write        # 需要写权限把监控状态提交回仓库
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: 检出仓库
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+
+      - name: 设置 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 运行监控（单次）
+        env:
+          RUN_ONCE: '1'                       # 单次运行模式，跑完即退出
+          MONITOR_CONFIG_B64: ${{ secrets.MONITOR_CONFIG_B64 }}   # 由网页导出的配置（base64）
+          SCT_KEY: ${{ secrets.SCT_KEY }}     # 可选：单独覆盖 Server酱 key
+        run: node monitor.js
+
+      - name: 提交监控状态
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add monitor-state.json 2>/dev/null || true
+          if git diff --cached --quiet; then
+            echo "状态无变化，跳过提交"
+          else
+            git commit -m "chore: update monitor state [skip ci]"
+            git push "https://${{ github.token }}@github.com/${{ github.repository }}.git" HEAD:${{ github.ref_name }}
+          fi

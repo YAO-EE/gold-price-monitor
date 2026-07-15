@@ -1,0 +1,963 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>金价监控与智能操作规划</title>
+<style>
+  :root{
+    --bg:#f6f7fb; --card:#ffffff; --ink:#1f2430; --sub:#6b7280;
+    --line:#e6e8ef; --gold:#c79a3a; --gold-soft:#f7efd9;
+    --up:#d9483b; --down:#1ba784; --warn:#e08a00; --blue:#2f6df0;
+    --shadow:0 1px 3px rgba(20,30,60,.06),0 8px 24px rgba(20,30,60,.06);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    background:var(--bg);color:var(--ink);line-height:1.5;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1080px;margin:0 auto;padding:18px 16px 60px}
+  header.top{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+  .logo{width:38px;height:38px;border-radius:10px;background:linear-gradient(135deg,#e7c66b,#c79a3a);
+    display:grid;place-items:center;color:#fff;font-weight:800;font-size:20px;box-shadow:var(--shadow)}
+  .title h1{font-size:19px;margin:0}
+  .title p{margin:0;color:var(--sub);font-size:12.5px}
+  .spacer{flex:1}
+  .seg{display:inline-flex;background:#eef0f6;border-radius:10px;padding:3px}
+  .seg button{border:0;background:transparent;padding:7px 13px;border-radius:8px;cursor:pointer;
+    font-size:13px;color:var(--sub);font-weight:600}
+  .seg button.on{background:#fff;color:var(--ink);box-shadow:var(--shadow)}
+  .toggle{display:inline-flex;align-items:center;gap:7px;font-size:13px;color:var(--sub);cursor:pointer;
+    user-select:none;background:#fff;border:1px solid var(--line);padding:7px 11px;border-radius:10px}
+  .toggle input{accent-color:var(--gold)}
+  .grid{display:grid;gap:14px}
+  @media(min-width:760px){.cols-2{grid-template-columns:1fr 1fr}.cols-3{grid-template-columns:repeat(3,1fr)}}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;box-shadow:var(--shadow)}
+  .card h2{font-size:14px;margin:0 0 12px;display:flex;align-items:center;gap:8px;color:var(--ink)}
+  .card h2 .tag{font-size:11px;color:var(--sub);font-weight:500;margin-left:auto}
+  .price-hero{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+  .price-hero .big{font-size:34px;font-weight:800;letter-spacing:-.5px}
+  .price-hero .unit{color:var(--sub);font-size:13px}
+  .chg{font-size:13px;font-weight:700;padding:2px 8px;border-radius:999px}
+  .chg.up{color:var(--up);background:rgba(217,72,59,.1)}
+  .chg.down{color:var(--down);background:rgba(27,167,132,.1)}
+  .meta{color:var(--sub);font-size:12px;margin-top:6px}
+  .btn{border:1px solid var(--line);background:#fff;color:var(--ink);padding:8px 12px;border-radius:10px;
+    cursor:pointer;font-size:13px;font-weight:600}
+  .btn:hover{background:#fafbfd}
+  .btn.primary{background:var(--gold);border-color:var(--gold);color:#fff}
+  .btn.primary:hover{filter:brightness(1.04)}
+  .btn.ghost{background:transparent}
+  .btn.sm{padding:5px 9px;font-size:12px}
+  .btn.danger{color:var(--up);border-color:#f3c9c4}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .stat{background:#fbfbfd;border:1px solid var(--line);border-radius:12px;padding:11px 12px}
+  .stat .k{font-size:11.5px;color:var(--sub)}
+  .stat .v{font-size:18px;font-weight:700;margin-top:3px}
+  .stat .v.pos{color:var(--up)} .stat .v.neg{color:var(--down)}
+  label.f{display:block;font-size:12px;color:var(--sub);margin:0 0 4px}
+  input,select{width:100%;border:1px solid var(--line);border-radius:10px;padding:9px 10px;font-size:14px;
+    background:#fff;color:var(--ink);font-family:inherit}
+  input:focus,select:focus{outline:2px solid var(--gold-soft);border-color:var(--gold)}
+  .field-grid{display:grid;gap:10px;grid-template-columns:repeat(2,1fr)}
+  @media(min-width:560px){.field-grid.c3{grid-template-columns:repeat(3,1fr)}}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:8px 8px;border-bottom:1px solid var(--line)}
+  th{color:var(--sub);font-weight:600;font-size:12px}
+  td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+  /* 交易记录区布局 */
+  .tx-form{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin-bottom:12px}
+  .tx-field{display:flex;flex-direction:column;gap:3px}
+  .tx-field label{font-size:11px;color:var(--sub);white-space:nowrap}
+  .tx-field input,.tx-field select{width:auto;min-width:96px;padding:7px 9px;font-size:13px}
+  .tx-form .btn.primary{height:36px;padding:0 18px;flex:0 0 auto}
+  .tx-scroll{max-height:320px;overflow-y:auto;overflow-x:hidden;margin-top:4px;border:1px solid var(--line);border-radius:10px;width:100%}
+  #txTable{width:100%;table-layout:fixed;border-collapse:collapse}
+  #txTable thead th{position:sticky;top:0;background:#fff;z-index:2;border-bottom:2px solid var(--line)}
+  .tx-actions{display:flex;gap:8px;align-items:center;margin-top:12px;flex-wrap:wrap}
+  .mini-btn{font-size:12px;padding:4px 10px;border:1px solid var(--line);background:#fff;border-radius:8px;cursor:pointer;color:var(--sub);font-weight:600}
+  .mini-btn:hover{background:#fafbfd}
+  .mini-btn.danger{color:var(--up);border-color:#f3c9c4}
+  .pill{display:inline-block;font-size:11px;font-weight:700;padding:1px 7px;border-radius:999px}
+  .pill.buy{color:var(--up);background:rgba(217,72,59,.1)}
+  .pill.sell{color:var(--down);background:rgba(27,167,132,.1)}
+  .advice{border-radius:14px;padding:14px 16px;border:1px solid}
+  .advice .lv{font-size:12px;font-weight:700;letter-spacing:.5px}
+  .advice .h{font-size:20px;font-weight:800;margin:4px 0 6px}
+  .advice .d{font-size:13.5px;color:#374151}
+  .advice.act{background:#fff7e8;border-color:#f3d9a0}
+  .advice.act .lv{color:var(--warn)}
+  .advice.add{background:#eef5ff;border-color:#cfe0ff}
+  .advice.add .lv{color:var(--blue)}
+  .advice.hold{background:#f1fbf6;border-color:#c8ecd9}
+  .advice.hold .lv{color:var(--down)}
+  .advice.stop{background:#fdecea;border-color:#f6c9c4}
+  .advice.stop .lv{color:var(--up)}
+  .advice.empty{background:#f6f7fb;border-color:var(--line)}
+  .advice.empty .lv{color:var(--sub)}
+  .actions{margin-top:10px;display:flex;gap:8px;flex-wrap:wrap}
+  .action-chip{background:#fff;border:1px solid var(--line);border-radius:10px;padding:8px 10px;font-size:12.5px;flex:1;min-width:140px}
+  .action-chip b{display:block;font-size:13.5px;margin-bottom:2px}
+  .action-chip span{color:var(--sub)}
+  .note{font-size:12px;color:var(--sub);margin-top:8px}
+  .pyr td.trig{color:var(--blue);font-weight:600}
+  .banner{position:fixed;left:50%;top:14px;transform:translateX(-50%);background:var(--up);color:#fff;
+    padding:10px 16px;border-radius:12px;font-weight:700;font-size:13.5px;box-shadow:var(--shadow);z-index:50;display:none}
+  .mini{font-size:12px;color:var(--sub)}
+  .hint{background:var(--gold-soft);border:1px solid #ecd9a3;color:#7a5e16;font-size:12.5px;
+    border-radius:10px;padding:9px 11px;margin-top:10px}
+  a.link{color:var(--blue);text-decoration:none}
+  .empty-tip{color:var(--sub);font-size:13px;padding:14px 0;text-align:center}
+  details summary{cursor:pointer;font-size:13px;color:var(--blue);font-weight:600;list-style:none}
+  details summary::-webkit-details-marker{display:none}
+  details summary::before{content:"▸ "}
+  details[open] summary::before{content:"▾ "}
+#importPanel{background:#fbfbfd}
+#importTable input.cell{width:108px;padding:6px 7px;font-size:12.5px}
+#importTable select{width:78px;padding:6px 7px;font-size:12.5px}
+.rawcell{color:var(--sub);font-size:11px;max-width:240px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:help}
+#pasteText{width:100%;border:1px solid var(--line);border-radius:10px;padding:10px;font-size:13px;font-family:inherit;resize:vertical}
+</style>
+</head>
+<body>
+<div class="banner" id="banner"></div>
+<div class="wrap">
+  <header class="top">
+    <div class="logo">金</div>
+    <div class="title">
+      <h1>金价监控与智能操作规划</h1>
+      <p>实时金价 · 持仓分析 · 补仓/止盈/止损建议，帮你稳住收益</p>
+    </div>
+    <div class="spacer"></div>
+    <div class="seg" id="modeSeg">
+      <button data-mode="domestic" class="on">国内金价(元/克)</button>
+      <button data-mode="international">国际金价(美元/盎司)</button>
+    </div>
+    <label class="toggle"><input type="checkbox" id="autoRefresh" checked /> 自动刷新</label>
+  </header>
+
+  <div class="grid">
+    <!-- 实时金价 -->
+    <section class="card">
+      <h2>实时金价 <span class="tag" id="priceTag"></span></h2>
+      <div class="price-hero">
+        <span class="big" id="livePrice">—</span>
+        <span class="unit" id="liveUnit">元/克</span>
+        <span class="chg" id="liveChg" style="display:none"></span>
+      </div>
+      <div class="meta" id="liveMeta">正在获取实时金价…</div>
+      <div class="row" style="margin-top:12px">
+        <button class="btn primary sm" id="refreshBtn">立即刷新</button>
+        <span class="mini">刷新间隔</span>
+        <select id="refreshSec" style="width:auto;padding:5px 8px">
+          <option value="5" selected>5秒</option>
+          <option value="10">10秒</option>
+          <option value="15">15秒</option>
+          <option value="30">30秒</option>
+          <option value="60">60秒</option>
+          <option value="300">5分钟</option>
+        </select>
+        <span class="mini">手动价格覆盖</span>
+        <input id="manualPrice" type="number" step="0.01" placeholder="留空则用实时价" style="width:150px" />
+      </div>
+      <div class="hint" id="srcHint">数据来源：国际金价 gold-api.com，按 USD/CNY 汇率换算为国内金价（可设置溢价）。若实时获取失败，请直接填写手动价格。</div>
+    </section>
+
+    <!-- 持仓概览 -->
+    <section class="card">
+      <h2>持仓概览 <span class="tag" id="posTag"></span></h2>
+      <div class="grid cols-3" id="statGrid"></div>
+    </section>
+
+    <!-- 交易记录 -->
+    <section class="card">
+      <h2>交易记录（用于计算均价与投入金额）</h2>
+      <form id="txForm" class="tx-form" onsubmit="return false">
+        <div class="tx-field"><label>日期</label><input type="date" id="tDate" /></div>
+        <div class="tx-field"><label>方向</label>
+          <select id="tType"><option value="buy">买入</option><option value="sell">卖出</option></select>
+        </div>
+        <div class="tx-field"><label>单价（<span id="tUnit">元/克</span>）</label><input type="number" id="tPrice" step="0.01" placeholder="0.00" /></div>
+        <div class="tx-field"><label>克重（克）</label><input type="number" id="tGrams" step="0.0001" placeholder="0.0000" /></div>
+        <div class="tx-field"><label>金额（元）</label><input type="number" id="tAmount" step="0.01" placeholder="0.00" /></div>
+        <div class="tx-field"><label>手续费（自动）</label><input type="number" id="tFee" step="0.01" placeholder="自动" readonly style="background:#f5f5f5;color:#666" /></div>
+        <button class="btn primary" id="addTx">添加记录</button>
+      </form>
+      <div class="tx-scroll">
+        <table id="txTable">
+          <thead><tr><th>日期</th><th>方向</th><th class="num">单价</th><th class="num">克重</th><th class="num">金额</th><th class="num">手续费</th><th></th></tr></thead>
+          <tbody id="txBody"></tbody>
+        </table>
+        <div class="empty-tip" id="txEmpty">还没有交易记录，添加后系统会自动算出你的持仓均价与投入金额。</div>
+      </div>
+      <div class="tx-actions">
+        <button class="mini-btn" id="importBtn">导入文本</button>
+        <button class="mini-btn" id="loadDemo">载入示例</button>
+        <button class="mini-btn danger" id="clearTx">清空</button>
+        <span class="mini" id="txCount"></span>
+      </div>
+
+      <div id="importPanel" class="card" style="display:none;margin-top:12px;box-shadow:none">
+        <h3 style="margin:0 0 8px;font-size:14px">批量导入交易记录</h3>
+        <div id="textTab" style="margin-top:8px">
+          <textarea id="pasteText" rows="5" placeholder="把交易记录文本粘贴到这里，每行一条（自动提取日期/方向/单价/克数/金额）。格式示例：&#10;2026-04-21 买入 1050.36 2.8504 3000.00&#10;2026-07-02 卖出 898.21 2.0000 1787.44"></textarea>
+          <div class="row" style="margin-top:8px">
+            <button class="btn primary sm" id="textParse">解析文本</button>
+            <span class="note" id="textStatus"></span>
+          </div>
+          <div class="hint">系统会自动识别：日期、买卖方向、单价、克数、金额；手续费按金额×费率（买0.2%/卖0.5%）自动计算。</div>
+        </div>
+
+        <div id="importGridWrap" style="margin-top:14px;display:none;overflow:auto">
+          <table id="importTable">
+            <thead><tr><th></th><th>日期</th><th>方向</th><th>单价</th><th>克重</th><th>金额</th><th>手续费</th><th>原始行（悬停查看）</th></tr></thead>
+            <tbody id="importBody"></tbody>
+          </table>
+          <div class="row" style="margin-top:12px">
+            <button class="btn primary" id="importConfirm">确认导入选中</button>
+            <button class="btn ghost" id="importCancel">取消</button>
+            <span class="mini" id="importCount"></span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 策略参数 -->
+    <section class="card">
+      <h2>策略参数（可调整）</h2>
+      <div class="field-grid c3">
+        <div><label class="f">止损线（低于均价 %）</label><input type="number" id="sStopLoss" step="0.5" /></div>
+        <div><label class="f">止盈线（高于均价 %）</label><input type="number" id="sTakeProfit" step="0.5" /></div>
+        <div><label class="f">补仓档位间距（每跌 %）</label><input type="number" id="sAddDrop" step="0.5" /></div>
+        <div><label class="f">单档补仓占市值（%）</label><input type="number" id="sAddTranche" step="1" /></div>
+        <div><label class="f">止盈时卖出仓位（%）</label><input type="number" id="sSellRatio" step="1" /></div>
+        <div><label class="f">国内金价溢价（%）</label><input type="number" id="sPremium" step="0.1" /></div>
+      </div>
+      <div class="note">说明：当金价低于均价进入「回调区」时，建议按档位小步补仓拉低均价；涨过止盈线则分批止盈锁定利润；跌破止损线则减仓截断亏损。</div>
+    </section>
+
+    <!-- 调仓提醒推送 -->
+    <section class="card">
+      <h2>调仓提醒推送（微信）</h2>
+      <label class="toggle" style="margin-bottom:10px"><input type="checkbox" id="pushEnabled" /> 启用推送</label>
+      <div class="tx-form" style="margin-bottom:10px">
+        <div class="tx-field"><label>推送通道</label>
+          <select id="pushChannel">
+            <option value="serverchan">Server酱（推到微信）</option>
+            <option value="wecom">企业微信机器人</option>
+          </select>
+        </div>
+        <div class="tx-field" style="flex:1;min-width:240px"><label id="pushKeyLabel">Server酱 SCKEY</label>
+          <input type="text" id="pushKey" placeholder="粘贴你的 SCKEY / Webhook Key" />
+        </div>
+      </div>
+      <div class="row">
+        <button class="btn sm" id="pushTest">测试推送</button>
+        <button class="btn sm ghost" id="exportCfg">导出监控配置</button>
+        <span class="mini" id="pushStatus"></span>
+      </div>
+      <div class="hint" id="pushHint">Server酱可免费把提醒推到你的微信：打开 sct.ftqq.com 用微信扫码登录，复制「SendKey」粘贴到上方即可。企业微信机器人需在群内添加机器人后复制 Webhook 地址里的 key（注意：浏览器直连企业微信常被 CORS 拦截，若不成功请改用 Server酱）。当金价进入补仓/止盈/止损等调仓点位时，会自动推送提醒。<br><b>「导出监控配置」</b>会下载 <code>monitor-config.json</code>，把它和 <code>monitor.js</code> 一起放到任意 24 小时运行的服务器/云函数上，即可实现关机也能监控推送（网页本身的推送依赖浏览器开着）。</div>
+      <div class="hint" id="pushHint">Server酱可免费把提醒推到你的微信：打开 sct.ftqq.com 用微信扫码登录，复制「SendKey」粘贴到上方即可。企业微信机器人需在群内添加机器人后复制 Webhook 地址里的 key（注意：浏览器直连企业微信常被 CORS 拦截，若不成功请改用 Server酱）。当金价进入补仓/止盈/止损等调仓点位时，会自动推送提醒。</div>
+    </section>
+
+    <!-- 智能建议 -->
+    <section class="card">
+      <h2>智能操作建议 <span class="tag" id="adviceTag"></span></h2>
+      <div id="adviceBox"></div>
+
+      <div style="margin-top:16px">
+        <details>
+          <summary>情景模拟：输入一个假设金价，看盈亏与建议</summary>
+          <div class="row" style="margin-top:10px">
+            <input id="simPrice" type="number" step="0.01" placeholder="假设金价" style="width:160px" />
+            <button class="btn" id="simBtn">模拟</button>
+            <span class="mini" id="simResult"></span>
+          </div>
+        </details>
+      </div>
+
+      <div style="margin-top:16px">
+        <details>
+          <summary>金字塔补仓计划表（提前规划，金价下跌不慌）</summary>
+          <div style="margin-top:10px;overflow:auto">
+            <table class="pyr" id="pyrTable">
+              <thead><tr><th>档位</th><th>触发价(较均价)</th><th class="num">建议买入(克)</th><th class="num">预计金额</th><th class="num">补后均价</th></tr></thead>
+              <tbody id="pyrBody"></tbody>
+            </table>
+          </div>
+        </details>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+"use strict";
+const STORE_KEY = "goldTracker.v1";
+const OZ_TO_G = 31.1034768;
+const DEFAULT_RATE = 7.18;
+
+const defaults = () => ({
+  mode:"domestic",
+  autoRefresh:true,
+  refreshSec:5,
+  manualPrice:null,
+  lastLive:null, // {ts, intl(usd/oz), rate}
+  strategy:{ stopLoss:8, takeProfit:15, addDrop:5, addTranche:25, sellRatio:33, premium:0 },
+  transactions:[], // {id,date,type,price,grams,fee}
+  push:{ enabled:false, channel:"serverchan", key:"" }
+});
+
+let state = load();
+function load(){
+  try{ const s = JSON.parse(localStorage.getItem(STORE_KEY)); if(s&&s.strategy) return Object.assign(defaults(),s); }catch(e){}
+  return defaults();
+}
+function save(){ localStorage.setItem(STORE_KEY, JSON.stringify(state)); }
+
+/* ---------- 格式化 ---------- */
+const nf = (d=2)=>new Intl.NumberFormat("zh-CN",{minimumFractionDigits:d,maximumFractionDigits:d});
+const fmtM = (v,d=2)=>nf(d).format(v||0);
+const fmtG = (v)=>nf(3).format(v||0);
+const fmtP = (v)=>(v>=0?"+":"")+nf(2).format(v)+"%";
+const unitLabel = ()=> state.mode==="domestic" ? "元/克" : "美元/盎司";
+
+/* ---------- 价格换算 ---------- */
+// 国内金价(元/克) = 国际(usd/oz) / 31.1035 * 汇率 * (1+溢价)
+function intlToDomestic(intlUsdOz, rate, premium){
+  return intlUsdOz / OZ_TO_G * rate * (1 + (premium||0)/100);
+}
+// 当前用于计算/显示的价格（统一为“当前模式单位”）
+function currentPrice(){
+  if(state.manualPrice && Number(state.manualPrice)>0) return Number(state.manualPrice);
+  if(!state.lastLive) return null;
+  const intl = state.lastLive.intl;
+  if(state.mode==="international") return intl;
+  return intlToDomestic(intl, state.lastLive.rate, state.strategy.premium);
+}
+
+/* ---------- 持仓计算 ---------- */
+function computePosition(){
+  const tx = [...state.transactions].sort((a,b)=> a.date<b.date?-1:1);
+  let grams=0, cost=0, realized=0, totalBuy=0, totalSell=0;
+  for(const t of tx){
+    const g=Number(t.grams)||0, p=Number(t.price)||0, f=Number(t.fee)||0;
+    if(t.type==="buy"){
+      const amt = g*p + f;
+      grams += g; cost += amt; totalBuy += amt;
+    }else{
+      if(grams>0){
+        const avgBefore = cost/grams;
+        const sold = Math.min(g, grams);
+        realized += sold*(p - avgBefore) - f;
+        cost -= sold*avgBefore;
+        grams -= sold;
+        totalSell += g*p;
+      }
+    }
+  }
+  const avg = grams>0 ? cost/grams : 0;
+  return {grams, cost, avg, realized, totalBuy, totalSell};
+}
+
+/* ---------- 建议引擎 ---------- */
+function recommend(price, pos, s){
+  if(pos.grams<=0){
+    return {level:"empty", lv:"无持仓", avg:0, h:"先添加你的交易记录",
+      d:"系统根据你每次的买入/卖出自动算出持仓克重、均价和投入金额，之后才能给出操作建议。", actions:[]};
+  }
+  const {grams, cost, avg} = pos;
+  const pnl = grams*price - cost;
+  const pnlPct = avg>0 ? (price-avg)/avg*100 : 0;
+  const sl = avg*(1 - s.stopLoss/100);
+  const tp = avg*(1 + s.takeProfit/100);
+
+  if(price <= sl){
+    const sellG = grams*0.5;
+    const proceeds = sellG*price;
+    const cutLoss = sellG*(price-avg);
+    return {level:"stop", lv:"⚠ 已触止损线", avg, h:"建议减仓止损，截断亏损",
+      d:`当前价低于均价 ${fmtP((price-avg)/avg*100)}，已跌破你设定的止损线。继续持有风险加大，建议先减仓 50% 降低暴露，保留现金等待更明确信号；若判断为长期看好且资金充裕，也可选择持有但务必控制总仓位。`,
+      actions:[
+        {b:`减仓50%：${fmtG(sellG)}克`, s:`回收约 ${fmtM(proceeds)} ${unitLabel().split("/")[0]}，减少浮亏敞口`},
+        {b:`清仓：${fmtG(grams)}克`, s:`回收约 ${fmtM(grams*price)} ${unitLabel().split("/")[0]}，锁定当前盈亏`}
+      ], sl, tp, pnl, pnlPct};
+  }
+  if(price < avg){
+    // 回调补仓区：目标把均价降到 (avg+price)/2
+    const target = (avg+price)/2;
+    const x = grams*(target-avg)/(price-target);
+    const amount = x*price;
+    return {level:"add", lv:"回调补仓区", avg, h:"小幅补仓，拉低均价",
+      d:`当前价低于均价 ${fmtP((price-avg)/avg*100)}，处于回调区。每下跌一档（${s.addDrop}%）补一仓，可逐步摊低持仓成本。下方「金字塔补仓计划表」已按你的参数预排好各档买入量与补后均价，照表执行即可，避免情绪化重仓。`,
+      actions:[
+        {b:`补仓至均价≈${fmtM(target)}`, s:`买入约 ${fmtG(x)}克，需 ${fmtM(amount)} ${unitLabel().split("/")[0]}`},
+        {b:"暂不加仓，继续观望", s:`当前浮亏 ${fmtM(pnl)}（${fmtP(pnlPct)}）`}
+      ], sl, tp, pnl, pnlPct};
+  }
+  if(price < tp){
+    return {level:"hold", lv:"盈利持有区", avg, h:"持有观望，设好回撤止盈",
+      d:`当前价高于均价 ${fmtP((price-avg)/avg*100)}，已处于盈利状态但尚未到止盈线。建议继续持有，并关注若从高点回落超过 ${s.addDrop}% 可考虑部分止盈。`,
+      actions:[
+        {b:"继续持有", s:`浮动盈利 ${fmtM(pnl)}（${fmtP(pnlPct)}）`},
+        {b:`距止盈线还差`, s:`再涨 ${fmtM(tp-price)} ${unitLabel().split("/")[0]}（${fmtP((tp-price)/price*100)}）触发分批止盈`}
+      ], sl, tp, pnl, pnlPct};
+  }
+  // 止盈区
+  const sellG = grams*(s.sellRatio/100);
+  const proceeds = sellG*price;
+  const lock = sellG*(price-avg);
+  return {level:"act", lv:"已达止盈线", avg, h:"分批止盈，落袋为安",
+    d:`当前价高于均价 ${fmtP((price-avg)/avg*100)}，超过止盈线。建议卖出 ${s.sellRatio}% 仓位锁定利润，剩余仓位继续跟随趋势，可用移动止盈保护已有收益。`,
+    actions:[
+      {b:`止盈卖出 ${s.sellRatio}%：${fmtG(sellG)}克`, s:`回收 ${fmtM(proceeds)}，锁定利润约 ${fmtM(lock)}`},
+      {b:"继续持有博更高", s:`剩余 ${fmtG(grams-sellG)}克，移动止盈保护收益`}
+    ], sl, tp, pnl, pnlPct};
+}
+
+/* ---------- 金字塔补仓表 ---------- */
+function pyramid(price, pos, s){
+  if(pos.grams<=0) return [];
+  const rows=[]; const {grams, cost, avg}=pos;
+  const mktVal = grams*price;
+  for(let k=1;k<=4;k++){
+    const level = avg*(1 - s.addDrop*k/100);
+    const addGrams = (mktVal * (s.addTranche/100) * k) / level; // 越跌买越多
+    const newAvg = (cost + addGrams*level)/(grams+addGrams);
+    rows.push({k, level, addGrams, amount:addGrams*level, newAvg});
+  }
+  return rows;
+}
+
+/* ---------- 实时获取 ---------- */
+async function fetchPrice(){
+  try{
+    const r = await fetch("https://api.gold-api.com/price/XAU", {cache:"no-store"});
+    if(!r.ok) throw new Error("http "+r.status);
+    const d = await r.json();
+    const intl = Number(d.price);
+    let rate = DEFAULT_RATE;
+    try{
+      const rr = await fetch("https://open.er-api.com/v6/latest/USD", {cache:"no-store"});
+      if(rr.ok){ const rd = await rr.json(); if(rd&&rd.rates&&rd.rates.CNY) rate = Number(rd.rates.CNY); }
+    }catch(e){}
+    state.lastLive = {ts:Date.now(), intl, rate};
+    save();
+    return true;
+  }catch(e){
+    return false;
+  }
+}
+
+/* ---------- 渲染 ---------- */
+function render(){
+  // 模式
+  document.querySelectorAll("#modeSeg button").forEach(b=>b.classList.toggle("on", b.dataset.mode===state.mode));
+  document.getElementById("autoRefresh").checked = state.autoRefresh;
+  document.getElementById("refreshSec").value = String(state.refreshSec);
+  document.getElementById("manualPrice").value = state.manualPrice||"";
+  document.getElementById("tUnit").textContent = unitLabel();
+  document.getElementById("srcHint").style.display = state.mode==="international" ? "none":"block";
+
+  // 价格
+  const price = currentPrice();
+  const liveEl = document.getElementById("livePrice");
+  const unitEl = document.getElementById("liveUnit");
+  unitEl.textContent = unitLabel();
+  if(price==null){
+    liveEl.textContent = "—";
+    document.getElementById("liveMeta").textContent = "暂无价格数据，请在上方填写手动价格。";
+  }else{
+    liveEl.textContent = state.mode==="domestic" ? fmtM(price) : fmtM(price);
+    const chg = document.getElementById("liveChg");
+    if(state.lastLive && state.manualPrice==null){
+      document.getElementById("liveMeta").textContent =
+        `更新于 ${new Date(state.lastLive.ts).toLocaleString("zh-CN")} · 汇率 ${fmtM(state.lastLive.rate,4)} · 国际 ${fmtM(state.lastLive.intl)} 美元/盎司`;
+      chg.style.display="inline-block";
+    }else if(state.manualPrice){
+      document.getElementById("liveMeta").textContent = "使用手动输入价格";
+      chg.style.display="none";
+    }
+  }
+  document.getElementById("priceTag").textContent = state.mode==="domestic" ? "元/克" : "USD/oz";
+
+  const pos = computePosition();
+
+  // 持仓概览
+  const mkt = pos.grams>0 && price!=null ? pos.grams*price : 0;
+  const floatPnl = mkt - pos.cost;
+  const floatPct = pos.avg>0 ? (price-pos.avg)/pos.avg*100 : 0;
+  const cls = (v)=> v>0?"pos":(v<0?"neg":"");
+  const statGrid = document.getElementById("statGrid");
+  statGrid.innerHTML = `
+    <div class="stat"><div class="k">持仓克重</div><div class="v">${fmtG(pos.grams)} 克</div></div>
+    <div class="stat"><div class="k">持仓均价</div><div class="v">${pos.avg>0?fmtM(pos.avg):"—"}</div></div>
+    <div class="stat"><div class="k">投入金额(持仓成本)</div><div class="v">${fmtM(pos.cost)}</div></div>
+    <div class="stat"><div class="k">当前市值</div><div class="v">${price!=null?fmtM(mkt):"—"}</div></div>
+    <div class="stat"><div class="k">浮动盈亏</div><div class="v ${cls(floatPnl)}">${price!=null?(fmtM(floatPnl)+" ("+fmtP(floatPct)+")"):"—"}</div></div>
+    <div class="stat"><div class="k">已实现盈亏</div><div class="v ${cls(pos.realized)}">${fmtM(pos.realized)}</div></div>`;
+
+  // 交易表
+  const body = document.getElementById("txBody");
+  const txs = [...state.transactions].sort((a,b)=>a.date<b.date?1:-1);
+  document.getElementById("txEmpty").style.display = txs.length? "none":"block";
+  document.getElementById("txCount").textContent = txs.length? `共 ${txs.length} 条记录` : "";
+  body.innerHTML = txs.map(t=>{
+    const amt = (Number(t.grams)||0)*(Number(t.price)||0);  // 纯金额，不含手续费
+    const fee = Number(t.fee)||0;
+    return `<tr>
+      <td>${t.date}</td>
+      <td><span class="pill ${t.type}">${t.type==="buy"?"买入":"卖出"}</span></td>
+      <td class="num">${fmtM(Number(t.price))}</td>
+      <td class="num">${fmtG(Number(t.grams))}</td>
+      <td class="num">${fmtM(amt)}</td>
+      <td class="num">${fmtM(fee)}</td>
+      <td><button class="btn sm ghost danger" data-del="${t.id}">删</button></td>
+    </tr>`;
+  }).join("");
+  body.querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>{
+    state.transactions = state.transactions.filter(t=>t.id!==b.dataset.del); save(); render();
+  });
+
+  // 策略参数回填
+  document.getElementById("sStopLoss").value = state.strategy.stopLoss;
+  document.getElementById("sTakeProfit").value = state.strategy.takeProfit;
+  document.getElementById("sAddDrop").value = state.strategy.addDrop;
+  document.getElementById("sAddTranche").value = state.strategy.addTranche;
+  document.getElementById("sSellRatio").value = state.strategy.sellRatio;
+  document.getElementById("sPremium").value = state.strategy.premium;
+
+  // 建议
+  const box = document.getElementById("adviceBox");
+  if(price==null){
+    box.innerHTML = `<div class="advice empty"><div class="lv">等待价格</div><div class="h">先获取或输入金价</div><div class="d">填好交易记录后，给出金价即可获得操作建议。</div></div>`;
+  }else{
+    const rec = recommend(price, pos, state.strategy);
+    let actionsHtml = rec.actions.map(a=>`<div class="action-chip"><b>${a.b}</b><span>${a.s}</span></div>`).join("");
+    let extra = "";
+    if(rec.sl!=null){
+      extra = `<div class="note">止损价 ${fmtM(rec.sl)} ｜ 止盈价 ${fmtM(rec.tp)} ｜ 当前浮动 ${fmtM(rec.pnl)}（${fmtP(rec.pnlPct)}）</div>`;
+    }
+    box.innerHTML = `<div class="advice ${rec.level}">
+        <div class="lv">${rec.lv}</div>
+        <div class="h">${rec.h}</div>
+        <div class="d">${rec.d}</div>
+        <div class="actions">${actionsHtml}</div>
+        ${extra}
+      </div>`;
+    document.getElementById("adviceTag").textContent = `当前价 ${fmtM(price)} ${unitLabel()}`;
+    checkAlert(rec);
+  }
+
+  // 金字塔
+  const pyrBody = document.getElementById("pyrBody");
+  const rows = pyramid(price||pos.avg, pos, state.strategy);
+  if(rows.length===0){
+    pyrBody.innerHTML = `<tr><td colspan="5" class="empty-tip">添加交易记录后自动生成补仓计划</td></tr>`;
+  }else{
+    pyrBody.innerHTML = rows.map(r=>`<tr>
+      <td>第${r.k}档</td>
+      <td class="trig">${fmtM(r.level)}（-${r.k*state.strategy.addDrop}%）</td>
+      <td class="num">${fmtG(r.addGrams)}</td>
+      <td class="num">${fmtM(r.amount)}</td>
+      <td class="num">${fmtM(r.newAvg)}</td>
+    </tr>`).join("");
+  }
+}
+
+let lastAlertKey = null;
+let lastPushLevel = null;  // 粗粒度状态（add/hold/act/stop）
+let lastPushTier = 0;     // 已触发的最深补仓档位（0=还没触发任何档位）
+function checkAlert(rec){
+  const price = currentPrice();
+  // 本地横幅：止损 / 止盈关键价
+  if(rec.sl){
+    let key=null, msg="";
+    if(price<=rec.sl){ key="sl"; msg=`⚠ 金价已跌破止损线 ${fmtM(rec.sl)}，建议减仓止损`; }
+    else if(price>=rec.tp){ key="tp"; msg=`★ 金价已达止盈线 ${fmtM(rec.tp)}，建议分批止盈`; }
+    const b=document.getElementById("banner");
+    if(key && key!==lastAlertKey){
+      b.textContent=msg; b.style.display="block";
+      setTimeout(()=>{b.style.display="none";}, 8000);
+      try{ if(window.Notification && Notification.permission==="granted") new Notification(msg); }catch(e){}
+    }
+    if(!key) b.style.display="none";
+    lastAlertKey = key;
+  }
+  // 微信推送：动作态切换时
+  pushIfNeeded(rec, price);
+}
+
+// 价格进入 补仓/止盈/止损 等动作态时推送（粗粒度状态切换 + 补仓区逐档位推送）
+function pushIfNeeded(rec, price){
+  const actionable = ["add","act","stop"];
+  const lvl = rec.level;
+
+  /* 1) 粗粒度状态切换推送（首次进入 add/act/stop 时推一次） */
+  if(actionable.includes(lvl)){
+    if(lvl !== lastPushLevel){
+      lastPushLevel = lvl;
+      lastPushTier = 0; // 重置档位追踪
+      const unit = unitLabel();
+      const line = rec.sl!=null ? `止损价 ${fmtM(rec.sl)} ／ 止盈价 ${fmtM(rec.tp)}` : "";
+      const title = `黄金调仓提醒：${rec.lv||""}`;
+      const desp = `当前${unit}：${fmtM(price)}\n建议：${rec.h||""}\n${rec.d||""}${line?("\n"+line):""}\n——金价监控助手`;
+      sendPush(title, desp);
+    }
+  } else {
+    lastPushLevel = lvl;
+    return; // hold/empty 不需要更细判断
+  }
+
+  /* 2) 细粒度：补仓区内按档位逐级推送 */
+  if(lvl === "add" && rec.avg > 0){
+    const s = state.strategy;
+    const drop = s.addDrop || 3;
+    let hitTier = 0;
+    for(let k = 1; k <= 8; k++){
+      const tierPrice = rec.avg * (1 - drop*k/100);
+      if(price <= tierPrice) hitTier = k;
+      else break;
+    }
+    if(hitTier > lastPushTier){
+      lastPushTier = hitTier;
+      const tierPrice = rec.avg * (1 - drop*hitTier/100);
+      const unit = unitLabel();
+      sendPush(
+        `补仓提醒：已进入第${hitTier}档`,
+        `金价 ${fmtM(price)} ${unit}\n` +
+        `第${hitTier}档触发价 ${fmtM(tierPrice)}（较均价 -${drop*hitTier}%）\n` +
+        `持仓均价 ${fmtM(rec.avg)}，浮亏 ${fmtP((price-rec.avg)/rec.avg*100)}\n` +
+        `建议按金字塔计划表买入第${hitTier}档对应克数\n` +
+        `——金价监控助手`
+      );
+    }
+  }
+}
+
+// 微信推送：Server酱（CORS 友好）或 企业微信机器人
+async function sendPush(title, desp){
+  if(!state.push.enabled || !state.push.key || !state.push.key.trim()) return false;
+  const key = state.push.key.trim();
+  try{
+    if(state.push.channel==="serverchan"){
+      const url = `https://sctapi.ftqq.com/${encodeURIComponent(key)}.send`;
+      const r = await fetch(url, {
+        method:"POST",
+        headers:{"Content-Type":"application/x-www-form-urlencoded"},
+        body:`title=${encodeURIComponent(title)}&desp=${encodeURIComponent(desp)}`
+      });
+      const j = await r.json().catch(()=>({}));
+      if(j.code===0) return true;
+      console.warn("Server酱推送返回：", j);
+      return false;
+    } else {
+      // 企业微信机器人：浏览器直连常受 CORS 限制
+      const url = `https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=${encodeURIComponent(key)}`;
+      await fetch(url, {
+        method:"POST", mode:"no-cors",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({msgtype:"markdown", markdown:{content:`## ${title}\n${desp.replace(/\n/g,"\n\n")}`}})
+      });
+      return true; // no-cors 无法读取响应
+    }
+  }catch(e){ console.warn("推送失败：", e); return false; }
+}
+
+// 同步推送设置到 UI
+function syncPushUI(){
+  document.getElementById("pushEnabled").checked = state.push.enabled;
+  document.getElementById("pushChannel").value = state.push.channel;
+  document.getElementById("pushKey").value = state.push.key || "";
+  document.getElementById("pushKeyLabel").textContent = state.push.channel==="wecom" ? "企业微信 Webhook Key" : "Server酱 SCKEY";
+}
+
+/* ---------- 事件 ---------- */
+document.getElementById("modeSeg").addEventListener("click", e=>{
+  const b=e.target.closest("button"); if(!b) return;
+  state.mode=b.dataset.mode; save(); render();
+});
+document.getElementById("autoRefresh").addEventListener("change", e=>{ state.autoRefresh=e.target.checked; save(); setupTimer(); });
+document.getElementById("refreshSec").addEventListener("change", e=>{ state.refreshSec=Number(e.target.value); save(); setupTimer(); });
+
+/* 推送设置 */
+document.getElementById("pushEnabled").addEventListener("change", e=>{ state.push.enabled=e.target.checked; save(); });
+document.getElementById("pushChannel").addEventListener("change", e=>{ state.push.channel=e.target.value; save(); syncPushUI(); });
+document.getElementById("pushKey").addEventListener("input", e=>{ state.push.key=e.target.value; save(); });
+document.getElementById("pushTest").addEventListener("click", async ()=>{
+  const st=document.getElementById("pushStatus");
+  if(!state.push.key || !state.push.key.trim()){ st.textContent="请先填写 SCKEY / Key"; return; }
+  st.textContent="发送中…";
+  const ok = await sendPush("金价监控 · 测试推送", "这是一条测试消息，说明推送通道已接通。\n当金价到达调仓点位时会自动发送提醒。");
+  st.textContent = ok ? "✅ 测试已发送，请查看微信" : "❌ 推送失败（检查 Key/通道，企业微信可能受 CORS 限制）";
+});
+// 导出监控配置：生成 monitor-config.json，供 monitor.js 后台运行使用
+document.getElementById("exportCfg").addEventListener("click", ()=>{
+  const cfg = {
+    mode: state.mode,
+    strategy: state.strategy,
+    transactions: state.transactions,
+    push: state.push
+  };
+  const blob = new Blob([JSON.stringify(cfg, null, 2)], {type:"application/json"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "monitor-config.json";
+  a.click();
+  URL.revokeObjectURL(a.href);
+  const st=document.getElementById("pushStatus");
+  st.textContent="✅ 已下载 monitor-config.json，把它和 monitor.js 放一起运行即可";
+});
+document.getElementById("manualPrice").addEventListener("input", e=>{ state.manualPrice = e.target.value? Number(e.target.value):null; save(); render(); });
+document.getElementById("refreshBtn").addEventListener("click", async ()=>{
+  document.getElementById("liveMeta").textContent="刷新中…";
+  await fetchPrice(); render();
+});
+
+/* 表单：金额由用户填入；单价+金额 → 反推克重，手续费按金额折算 */
+let lastEdit = null; // 'amount' | 'grams' | 'price'
+function autoCalcForm(){
+  const price=Number(document.getElementById("tPrice").value);
+  const grams=Number(document.getElementById("tGrams").value);
+  const amtEl=document.getElementById("tAmount");
+  const feeEl=document.getElementById("tFee");
+  const amount=Number(amtEl.value);
+  const type=document.getElementById("tType").value;
+  const rate = type==="buy" ? 0.002 : 0.005; // 买入0.2% / 卖出0.5%
+  if(price>0){
+    if(lastEdit==="amount" && amount>0){
+      document.getElementById("tGrams").value = +(amount/price).toFixed(4);
+    }else if(lastEdit==="grams" && grams>0){
+      amtEl.value = +(price*grams).toFixed(2);
+    }else if(amount>0){
+      document.getElementById("tGrams").value = +(amount/price).toFixed(4);
+    }else if(grams>0){
+      amtEl.value = +(price*grams).toFixed(2);
+    }
+  }
+  const a=Number(document.getElementById("tAmount").value);
+  feeEl.value = a>0 ? +(a*rate).toFixed(2) : "";
+}
+document.getElementById("tPrice").addEventListener("input", e=>{ lastEdit="price"; autoCalcForm(); });
+document.getElementById("tGrams").addEventListener("input", e=>{ lastEdit="grams"; autoCalcForm(); });
+document.getElementById("tAmount").addEventListener("input", e=>{ lastEdit="amount"; autoCalcForm(); });
+document.getElementById("tType").addEventListener("change", autoCalcForm);
+
+document.getElementById("addTx").addEventListener("click", ()=>{
+  const date=document.getElementById("tDate").value || new Date().toISOString().slice(0,10);
+  const type=document.getElementById("tType").value;
+  const price=Number(document.getElementById("tPrice").value);
+  let grams=Number(document.getElementById("tGrams").value);
+  let amount=Number(document.getElementById("tAmount").value);
+  if(!(price>0)){ alert("请填写有效的单价"); return; }
+  if(!(amount>0) && !(grams>0)){ alert("请填写金额或克重（至少一项）"); return; }
+  if(amount>0 && grams<=0) grams = amount/price;          // 金额 → 克重
+  if(grams>0 && amount<=0) amount = price*grams;           // 克重 → 金额
+  const feeRate = type==="buy" ? 0.002 : 0.005;           // 买入0.2% / 卖出0.5%
+  const fee = +(amount * feeRate).toFixed(2);
+  state.transactions.push({id:"t"+Date.now()+Math.random().toString(36).slice(2,6),date,type,price,grams:+(+grams).toFixed(4),fee});
+  save();
+  document.getElementById("tPrice").value=""; document.getElementById("tGrams").value="";
+  document.getElementById("tAmount").value=""; document.getElementById("tFee").value="";
+  lastEdit=null;
+  render();
+});
+document.getElementById("clearTx").addEventListener("click", ()=>{
+  if(confirm("确定清空所有交易记录？")){ state.transactions=[]; save(); render(); }
+});
+document.getElementById("loadDemo").addEventListener("click", ()=>{
+  if(state.transactions.length && !confirm("覆盖为示例数据？")) return;
+  const base = state.mode==="domestic" ? 560 : 2350;
+  state.transactions = [
+    {id:"d1",date:"2026-03-01",type:"buy",price:base*0.95,grams:10,fee:0},
+    {id:"d2",date:"2026-04-10",type:"buy",price:base*1.0,grams:8,fee:0},
+    {id:"d3",date:"2026-05-20",type:"buy",price:base*1.05,grams:6,fee:0},
+    {id:"d4",date:"2026-06-15",type:"sell",price:base*1.12,grams:5,fee:0}
+  ];
+  save(); render();
+});
+
+/* ---------- 批量导入：文本 ---------- */
+let importRows = [];
+function openImport(show){
+  document.getElementById("importPanel").style.display = show ? "block" : "none";
+  if(!show){ document.getElementById("importGridWrap").style.display="none"; document.getElementById("textStatus").textContent=""; }
+}
+document.getElementById("importBtn").addEventListener("click", ()=>{
+  const p = document.getElementById("importPanel");
+  openImport(p.style.display==="none");
+});
+document.getElementById("importCancel").addEventListener("click", ()=>openImport(false));
+
+// 文本解析：从含日期的行里抽取 方向/价格/克重
+function parseText(text){
+  /* 智能识别文本格式：
+     格式A: 日期 方向 单价 克数 金额   ← 5字段，金额为主输入，手续费自动算
+     格式B: 日期 方向 单价 克数       ← 4字段，无单独金额列（=单价×克重）
+     策略：用"哪两数相乘最接近第三数"来识别单价/克数/金额三元组。
+  */
+  const lines = String(text).split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+  const dateRe = /(\d{4})[-/.年](\d{1,2})[-/.月](\d{1,2})/;
+  const numRe = /\d[\d,]*\.?\d*/g;
+  const rows = [];
+  for(const line of lines){
+    const dm = line.match(dateRe);
+    if(!dm) continue;
+    const date = `${dm[1]}-${dm[2].padStart(2,"0")}-${dm[3].padStart(2,"0")}`;
+    let type = "buy";
+    if(/卖出|卖|赎回|赎|减仓|平仓|抛出/.test(line)) type="sell";
+    else if(/买入|买|申购|购|建仓|加仓|定投/.test(line)) type="buy";
+    const nums = (line.match(numRe)||[]).map(s=>Number(s.replace(/,/g,""))).filter(n=>isFinite(n)&&n>0&&n<1e8);
+
+    /* 关键修复：只移除日期组件的【各一个】副本（按值），而不是全部移除。
+       原因：业务数据中的克重可能恰好等于日份数字（如 02日→克重2g），
+       按值过滤会把合法数据一起删掉。现在用 indexOf 只删第一个匹配。 */
+    let cand = [...nums];
+    for(const dv of [Number(dm[1]), Number(dm[2]), Number(dm[3])]){
+      const idx = cand.indexOf(dv);
+      if(idx!==-1) cand.splice(idx,1);
+    }
+
+    let price=0, grams=0, _amount=0;
+
+    /* 核心识别逻辑：尝试所有两数组合，看乘积是否接近剩余的某个数字 */
+    if(cand.length >= 3){
+      let bestErr = Infinity, bestPrice=0, bestGrams=0, bestAmt=0;
+      for(let i=0;i<cand.length;i++){
+        for(let j=i+1;j<cand.length;j++){
+          const prod = cand[i]*cand[j];
+          for(let k=0;k<cand.length;k++){
+            if(k===i||k===j) continue;
+            const ref=Math.max(prod,cand[k]);
+            const err=Math.abs(prod-cand[k])/ref;
+            if(err<bestErr){ bestErr=err; bestPrice=cand[i]; bestGrams=cand[j]; bestAmt=cand[k]; }
+          }
+        }}
+      /* 如果误差<30%，认为找到了 单价×克数≈金额 的三元组；否则降级为 大→小 排序 */
+      if(bestErr<0.3 && bestAmt>0){ price=bestPrice; grams=bestGrams; _amount=bestAmt; }
+      else{
+        const sorted=[...cand].sort((a,b)=>b-a); price=sorted[0]; grams=sorted[1]; _amount=sorted[2];
+      }
+    }else if(cand.length===2){
+      const sorted=[...cand].sort((a,b)=>b-a); price=sorted[0]; grams=sorted[1];
+    }else if(cand.length===1){
+      if(cand[0]>50) price=cand[0]; else grams=cand[0];
+    }
+
+    rows.push({date,type,price,grams,_amount:_amount||0,fee:0,raw:line});
+  }
+  return rows;
+}
+
+function fillGrid(rows){
+  importRows = rows;
+  const wrap = document.getElementById("importGridWrap");
+  if(rows.length===0){ wrap.style.display="none"; return; }
+  wrap.style.display="block";
+  const body = document.getElementById("importBody");
+  body.innerHTML = rows.map((r,i)=>`
+    <tr>
+      <td><input type="checkbox" data-i="${i}" checked /></td>
+      <td><input class="cell" type="date" data-f="date" data-i="${i}" value="${r.date}" /></td>
+      <td><select data-f="type" data-i="${i}"><option value="buy" ${r.type==="buy"?"selected":""}>买入</option><option value="sell" ${r.type==="sell"?"selected":""}>卖出</option></select></td>
+      <td><input class="cell" type="number" step="0.01" data-f="price" data-i="${i}" value="${r.price}" /></td>
+      <td><input class="cell" type="number" step="0.0001" data-f="grams" data-i="${i}" value="${r.grams}" /></td>
+      <td><input class="cell" type="number" step="0.01" data-f="_amount" data-i="${i}" value="${(r._amount||0).toFixed(2)}" title="金额（可编辑）" /></td>
+      <td><input class="cell" type="number" step="0.01" data-f="fee" data-i="${i}" value="${(r._amount||0)>0 ? +((r._amount)*(r.type==='buy'?0.002:0.005)).toFixed(2) : (r.fee||0)}" readonly style="background:#f8f8f8;color:#666;font-size:12px" title="=金额×费率(买0.2%/卖0.5%)" /></td>
+      <td class="rawcell" title="${r.raw.replace(/"/g,"&quot;")}">${r.raw}</td>
+    </tr>`).join("");
+  body.querySelectorAll("[data-f]").forEach(el=>{
+    el.addEventListener("input", ()=>{
+      const i=+el.dataset.i, f=el.dataset.f;
+      importRows[i][f] = (f==="type") ? el.value : (el.value===""?0:Number(el.value));
+      /* 金额或方向变了 → 自动重算手续费 */
+      if(f==="_amount" || f==="type"){
+        const r=importRows[i];
+        if(r._amount>0){
+          const rate=r.type==="buy"?0.002:0.005;
+          r.fee=+(r._amount*rate).toFixed(2);
+          // 同步更新UI上的fee单元格
+          const feeCell=document.querySelector(`#importBody tr:nth-child(${i+1}) [data-f="fee"]`);
+          if(feeCell) feeCell.value=r.fee;
+        }
+      }
+    });
+  });
+  document.getElementById("importCount").textContent = `共 ${rows.length} 条候选，勾选要导入的`;
+}
+
+// 粘贴文本
+document.getElementById("textParse").addEventListener("click", ()=>{
+  const txt = document.getElementById("pasteText").value;
+  if(!txt.trim()){ document.getElementById("textStatus").textContent="请先粘贴文本"; return; }
+  const rows = parseText(txt);
+  if(rows.length===0){ document.getElementById("textStatus").textContent="未识别出含日期的交易行，请检查格式（每行需有日期）。"; document.getElementById("importGridWrap").style.display="none"; return; }
+  fillGrid(rows);
+  document.getElementById("textStatus").textContent = `解析出 ${rows.length} 条候选，请核对后导入。`;
+});
+
+// 确认导入
+document.getElementById("importConfirm").addEventListener("click", ()=>{
+  const checks = document.querySelectorAll("#importBody input[type=checkbox]");
+  let added=0;
+  checks.forEach(c=>{
+    if(!c.checked) return;
+    const r = importRows[+c.dataset.i];
+    if(Number(r.price)>0 && (Number(r._amount)>0 || Number(r.grams)>0)){
+      let price=Number(r.price);
+      let grams=Number(r.grams), amount=Number(r._amount);
+      if(amount>0 && price>0) grams = amount/price;
+      else if(grams>0) amount = price*grams;
+      const rate = r.type==="buy" ? 0.002 : 0.005; // 买入0.2% / 卖出0.5%
+      const fee = amount>0 ? +(amount*rate).toFixed(2) : (Number(r.fee)||0);
+      state.transactions.push({id:"t"+Date.now()+Math.random().toString(36).slice(2,6),date:r.date,type:r.type,price:Number(r.price),grams:+(+grams).toFixed(4),fee});
+      added++;
+    }
+  });
+  if(added){ save(); render(); }
+  openImport(false);
+  if(added) document.getElementById("txCount").textContent = `已导入 ${added} 条`;
+});
+
+["sStopLoss","sTakeProfit","sAddDrop","sAddTranche","sSellRatio","sPremium"].forEach(id=>{
+  document.getElementById(id).addEventListener("input", e=>{
+    const map={sStopLoss:"stopLoss",sTakeProfit:"takeProfit",sAddDrop:"addDrop",sAddTranche:"addTranche",sSellRatio:"sellRatio",sPremium:"premium"};
+    state.strategy[map[id]] = Number(e.target.value)||0; save(); render();
+  });
+});
+
+document.getElementById("simBtn").addEventListener("click", ()=>{
+  const p=Number(document.getElementById("simPrice").value);
+  if(!(p>0)){ document.getElementById("simResult").textContent="请输入有效价格"; return; }
+  const pos=computePosition();
+  const rec=recommend(p,pos,state.strategy);
+  const mkt=pos.grams*p, pnl=mkt-pos.cost, pct=pos.avg>0?(p-pos.avg)/pos.avg*100:0;
+  document.getElementById("simResult").textContent =
+    `模拟价 ${fmtM(p)} → ${rec.h}；浮动盈亏 ${fmtM(pnl)}（${fmtP(pct)}）`;
+});
+
+/* ---------- 定时器 ---------- */
+let timer=null;
+let fetching=false;
+function setupTimer(){
+  if(timer) clearInterval(timer);
+  if(state.autoRefresh){
+    timer=setInterval(async ()=>{
+      if(fetching) return;          // 上一次还没返回则不重入，避免堆积
+      fetching=true;
+      try{ await fetchPrice(); render(); } finally{ fetching=false; }
+    }, Math.max(2, state.refreshSec)*1000);
+  }
+}
+
+/* ---------- 启动 ---------- */
+document.getElementById("tDate").value = new Date().toISOString().slice(0,10);
+(async ()=>{
+  syncPushUI();
+  render();          // 先渲染，保证界面立即可见，不被网络阻塞
+  setupTimer();
+  if("Notification" in window && Notification.permission==="default"){ try{Notification.requestPermission();}catch(e){} }
+  const ok = await fetchPrice();  // 后台拉取实时价，成功后再刷新
+  if(ok) render();
+})();
+</script>
+</body>
+</html>

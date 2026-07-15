@@ -1,0 +1,10 @@
+{
+  "mode": "domestic",
+  "strategy": { "stopLoss": 8, "takeProfit": 15, "addDrop": 3, "addTranche": 25, "sellRatio": 33, "premium": 0 },
+  "transactions": [
+    { "id": "t1", "date": "2026-04-21", "type": "buy", "price": 1050.36, "grams": 2.8504, "fee": 6 },
+    { "id": "t2", "date": "2026-04-28", "type": "buy", "price": 1019.92, "grams": 1.0274, "fee": 2.1 },
+    { "id": "t3", "date": "2026-07-13", "type": "buy", "price": 886.5, "grams": 1.128, "fee": 2 }
+  ],
+  "push": { "enabled": false, "channel": "serverchan", "key": "" }
+}

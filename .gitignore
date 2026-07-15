@@ -1,0 +1,10 @@
+# 项目数据与本地环境，不进仓库
+.workbuddy/
+node_modules/
+*.log
+
+# 真实持仓配置（含推送 key）走 Secret 注入，不要提交到公开仓库
+monitor-config.json
+
+# 旧方案（Cloudflare）备用，不进 GitHub 主仓库
+cloudflare/
