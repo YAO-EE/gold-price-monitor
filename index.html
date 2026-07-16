@@ -252,6 +252,8 @@
       <div class="row">
         <button class="btn sm" id="pushTest">测试推送</button>
         <button class="btn sm ghost" id="exportCfg">导出监控配置</button>
+        <button class="btn sm ghost" id="importCfg">导入配置</button>
+        <input type="file" id="importCfgFile" accept=".json,application/json" style="display:none" />
         <span class="mini" id="pushStatus"></span>
       </div>
       <div class="hint" id="pushHint">Server酱可免费把提醒推到你的微信：打开 sct.ftqq.com 用微信扫码登录，复制「SendKey」粘贴到上方即可。企业微信机器人需在群内添加机器人后复制 Webhook 地址里的 key（注意：浏览器直连企业微信常被 CORS 拦截，若不成功请改用 Server酱）。当金价进入补仓/止盈/止损等调仓点位时，会自动推送提醒。<br><b>「导出监控配置」</b>会下载 <code>monitor-config.json</code>，把它和 <code>monitor.js</code> 一起放到任意 24 小时运行的服务器/云函数上，即可实现关机也能监控推送（网页本身的推送依赖浏览器开着）。</div>
@@ -705,6 +707,37 @@ document.getElementById("exportCfg").addEventListener("click", ()=>{
   URL.revokeObjectURL(a.href);
   const st=document.getElementById("pushStatus");
   st.textContent="✅ 已下载 monitor-config.json，把它和 monitor.js 放一起运行即可";
+});
+// 导入配置文件：上传 monitor-config.json 恢复全部数据（任意设备/公开页可用）
+document.getElementById("importCfg").addEventListener("click", ()=> document.getElementById("importCfgFile").click());
+document.getElementById("importCfgFile").addEventListener("change", e=>{
+  const file = e.target.files && e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    const st=document.getElementById("pushStatus");
+    try{
+      const cfg = JSON.parse(reader.result);
+      if(!cfg || typeof cfg!=="object") throw new Error("文件不是合法的 JSON");
+      if(!Array.isArray(cfg.transactions) && !cfg.strategy) throw new Error("不是有效的监控配置文件");
+      if(cfg.mode) state.mode = cfg.mode;
+      if(cfg.strategy) state.strategy = Object.assign(defaults().strategy, cfg.strategy);
+      if(Array.isArray(cfg.transactions)) state.transactions = cfg.transactions.map(t=>({
+        id: t.id || ("t"+Date.now().toString(36)+Math.random().toString(36).slice(2,6)),
+        date: t.date||"", type: t.type==="sell"?"sell":"buy",
+        price: Number(t.price)||0, grams: Number(t.grams)||0, fee: Number(t.fee)||0
+      }));
+      if(cfg.push) state.push = Object.assign({enabled:false,channel:"serverchan",key:""}, cfg.push);
+      const pe=document.getElementById("pushEnabled"); if(pe) pe.checked = !!state.push.enabled;
+      const pk=document.getElementById("pushKey"); if(pk) pk.value = state.push.key||"";
+      save(); render();
+      st.textContent = `✅ 已从配置文件恢复 ${state.transactions.length} 条交易记录`;
+    }catch(err){
+      st.textContent = "❌ 导入失败：" + err.message;
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = ""; // 允许重复选择同一文件
 });
 document.getElementById("manualPrice").addEventListener("input", e=>{ state.manualPrice = e.target.value? Number(e.target.value):null; save(); render(); });
 document.getElementById("refreshBtn").addEventListener("click", async ()=>{
