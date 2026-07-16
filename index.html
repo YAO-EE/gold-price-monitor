@@ -176,7 +176,7 @@
           <select id="tType"><option value="buy">买入</option><option value="sell">卖出</option></select>
         </div>
         <div class="tx-field"><label>单价（<span id="tUnit">元/克</span>）</label><input type="number" id="tPrice" step="0.01" placeholder="0.00" /></div>
-        <div class="tx-field"><label>克重（克）</label><input type="number" id="tGrams" step="0.0001" placeholder="0.0000" /></div>
+        <div class="tx-field"><label>克重（自动）</label><input type="number" id="tGrams" step="0.0001" placeholder="自动计算" readonly style="background:#f5f5f5;color:#666" /></div>
         <div class="tx-field"><label>金额（元）</label><input type="number" id="tAmount" step="0.01" placeholder="0.00" /></div>
         <div class="tx-field"><label>手续费（自动）</label><input type="number" id="tFee" step="0.01" placeholder="自动" readonly style="background:#f5f5f5;color:#666" /></div>
         <button class="btn primary" id="addTx">添加记录</button>
@@ -760,52 +760,45 @@ document.getElementById("refreshBtn").addEventListener("click", async ()=>{
   await fetchPrice(); render();
 });
 
-/* 表单：金额由用户填入；单价+金额 → 反推克重，手续费按金额折算 */
-let lastEdit = null; // 'amount' | 'grams' | 'price'
+/* 表单：用户输入单价+金额 → 自动算手续费 → 再算克重=(金额-手续费)/单价 */
 function autoCalcForm(){
   const price=Number(document.getElementById("tPrice").value);
-  const grams=Number(document.getElementById("tGrams").value);
   const amtEl=document.getElementById("tAmount");
   const feeEl=document.getElementById("tFee");
+  const gramEl=document.getElementById("tGrams");
   const amount=Number(amtEl.value);
   const type=document.getElementById("tType").value;
   const rate = type==="buy" ? 0.002 : 0.005; // 买入0.2% / 卖出0.5%
-  if(price>0){
-    if(lastEdit==="amount" && amount>0){
-      document.getElementById("tGrams").value = +(amount/price).toFixed(4);
-    }else if(lastEdit==="grams" && grams>0){
-      amtEl.value = +(price*grams).toFixed(2);
-    }else if(amount>0){
-      document.getElementById("tGrams").value = +(amount/price).toFixed(4);
-    }else if(grams>0){
-      amtEl.value = +(price*grams).toFixed(2);
+  // 手续费 = 金额 × 费率
+  if(amount>0){
+    feeEl.value = +(amount*rate).toFixed(2);
+    // 克重 = (金额 - 手续费) / 单价
+    if(price>0){
+      gramEl.value = +((amount - Number(feeEl.value))/price).toFixed(4);
     }
+  }else{
+    feeEl.value = "";
+    gramEl.value = "";
   }
-  const a=Number(document.getElementById("tAmount").value);
-  feeEl.value = a>0 ? +(a*rate).toFixed(2) : "";
 }
-document.getElementById("tPrice").addEventListener("input", e=>{ lastEdit="price"; autoCalcForm(); });
-document.getElementById("tGrams").addEventListener("input", e=>{ lastEdit="grams"; autoCalcForm(); });
-document.getElementById("tAmount").addEventListener("input", e=>{ lastEdit="amount"; autoCalcForm(); });
+document.getElementById("tPrice").addEventListener("input", autoCalcForm);
+document.getElementById("tAmount").addEventListener("input", autoCalcForm);
 document.getElementById("tType").addEventListener("change", autoCalcForm);
 
 document.getElementById("addTx").addEventListener("click", ()=>{
   const date=document.getElementById("tDate").value || new Date().toISOString().slice(0,10);
   const type=document.getElementById("tType").value;
   const price=Number(document.getElementById("tPrice").value);
-  let grams=Number(document.getElementById("tGrams").value);
-  let amount=Number(document.getElementById("tAmount").value);
+  const amount=Number(document.getElementById("tAmount").value);
   if(!(price>0)){ alert("请填写有效的单价"); return; }
-  if(!(amount>0) && !(grams>0)){ alert("请填写金额或克重（至少一项）"); return; }
-  if(amount>0 && grams<=0) grams = amount/price;          // 金额 → 克重
-  if(grams>0 && amount<=0) amount = price*grams;           // 克重 → 金额
-  const feeRate = type==="buy" ? 0.002 : 0.005;           // 买入0.2% / 卖出0.5%
+  if(!(amount>0)){ alert("请填写金额"); return; }
+  const feeRate = type==="buy" ? 0.002 : 0.005;
   const fee = +(amount * feeRate).toFixed(2);
-  state.transactions.push({id:"t"+Date.now()+Math.random().toString(36).slice(2,6),date,type,price,grams:+(+grams).toFixed(4),amount:+(+amount).toFixed(2),fee});
+  const grams = +((amount - fee)/price).toFixed(4);
+  state.transactions.push({id:"t"+Date.now()+Math.random().toString(36).slice(2,6),date,type,price,grams,amount,fee});
   save();
   document.getElementById("tPrice").value=""; document.getElementById("tGrams").value="";
   document.getElementById("tAmount").value=""; document.getElementById("tFee").value="";
-  lastEdit=null;
   render();
 });
 document.getElementById("clearTx").addEventListener("click", ()=>{
@@ -952,11 +945,13 @@ document.getElementById("importConfirm").addEventListener("click", ()=>{
     if(Number(r.price)>0 && (Number(r._amount)>0 || Number(r.grams)>0)){
       let price=Number(r.price);
       let grams=Number(r.grams), amount=Number(r._amount);
-      if(amount>0 && price>0) grams = amount/price;
-      else if(grams>0) amount = price*grams;
-      const rate = r.type==="buy" ? 0.002 : 0.005; // 买入0.2% / 卖出0.5%
+      // 用户没提供克重时才反算；用户已提供则保留原值
+      if(grams<=0 && amount>0 && price>0) grams = +(amount/price).toFixed(4);
+      // 用户没提供金额时才正算
+      if(amount<=0 && grams>0 && price>0) amount = +(price*grams).toFixed(2);
+      const rate = r.type==="buy" ? 0.002 : 0.005;
       const fee = amount>0 ? +(amount*rate).toFixed(2) : (Number(r.fee)||0);
-      state.transactions.push({id:"t"+Date.now()+Math.random().toString(36).slice(2,6),date:r.date,type:r.type,price:Number(r.price),grams:+(+grams).toFixed(4),amount:+(+amount).toFixed(2),fee});
+      state.transactions.push({id:"t"+Date.now()+Math.random().toString(36).slice(2,6),date:r.date,type:r.type,price,grams:+(+grams).toFixed(4),amount:+(+amount).toFixed(2),fee});
       added++;
     }
   });
