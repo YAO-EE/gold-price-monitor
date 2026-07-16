@@ -304,7 +304,7 @@ const defaults = () => ({
   manualPrice:null,
   lastLive:null, // {ts, intl(usd/oz), rate}
   strategy:{ stopLoss:8, takeProfit:15, addDrop:5, addTranche:25, sellRatio:33, premium:0 },
-  transactions:[], // {id,date,type,price,grams,fee}
+  transactions:[], // {id,date,type,price,grams,amount,fee}
   push:{ enabled:false, channel:"serverchan", key:"" }
 });
 
@@ -327,13 +327,19 @@ const unitLabel = ()=> state.mode==="domestic" ? "元/克" : "美元/盎司";
 function intlToDomestic(intlUsdOz, rate, premium){
   return intlUsdOz / OZ_TO_G * rate * (1 + (premium||0)/100);
 }
-// 当前用于计算/显示的价格（统一为“当前模式单位”）
+// 当前用于计算/显示的价格（统一为“当前模式单位”，仅用于头条展示）
 function currentPrice(){
   if(state.manualPrice && Number(state.manualPrice)>0) return Number(state.manualPrice);
   if(!state.lastLive) return null;
   const intl = state.lastLive.intl;
   if(state.mode==="international") return intl;
   return intlToDomestic(intl, state.lastLive.rate, state.strategy.premium);
+}
+// 监控价格：调仓/推送一律锚定国内金价（元/克），与当前展示模式（国际/国内）无关
+function monitorPrice(){
+  if(state.manualPrice && Number(state.manualPrice)>0) return Number(state.manualPrice);
+  if(!state.lastLive) return null;
+  return intlToDomestic(state.lastLive.intl, state.lastLive.rate, state.strategy.premium);
 }
 
 /* ---------- 持仓计算 ---------- */
@@ -459,16 +465,17 @@ function render(){
   document.getElementById("tUnit").textContent = unitLabel();
   document.getElementById("srcHint").style.display = state.mode==="international" ? "none":"block";
 
-  // 价格
-  const price = currentPrice();
+  // 价格（展示值 displayPrice：随模式切换显示国际/国内；监控值 monitor：始终锚定国内金价）
+  const displayPrice = currentPrice();
+  const monitor = monitorPrice();
   const liveEl = document.getElementById("livePrice");
   const unitEl = document.getElementById("liveUnit");
   unitEl.textContent = unitLabel();
-  if(price==null){
+  if(displayPrice==null){
     liveEl.textContent = "—";
     document.getElementById("liveMeta").textContent = "暂无价格数据，请在上方填写手动价格。";
   }else{
-    liveEl.textContent = state.mode==="domestic" ? fmtM(price) : fmtM(price);
+    liveEl.textContent = fmtM(displayPrice);
     const chg = document.getElementById("liveChg");
     if(state.lastLive && state.manualPrice==null){
       document.getElementById("liveMeta").textContent =
@@ -483,18 +490,18 @@ function render(){
 
   const pos = computePosition();
 
-  // 持仓概览
-  const mkt = pos.grams>0 && price!=null ? pos.grams*price : 0;
+  // 持仓概览（市值/浮动盈亏一律按国内金价计算）
+  const mkt = pos.grams>0 && monitor!=null ? pos.grams*monitor : 0;
   const floatPnl = mkt - pos.cost;
-  const floatPct = pos.avg>0 ? (price-pos.avg)/pos.avg*100 : 0;
+  const floatPct = pos.avg>0 ? (monitor-pos.avg)/pos.avg*100 : 0;
   const cls = (v)=> v>0?"pos":(v<0?"neg":"");
   const statGrid = document.getElementById("statGrid");
   statGrid.innerHTML = `
     <div class="stat"><div class="k">持仓克重</div><div class="v">${fmtG(pos.grams)} 克</div></div>
     <div class="stat"><div class="k">持仓均价</div><div class="v">${pos.avg>0?fmtM(pos.avg):"—"}</div></div>
     <div class="stat"><div class="k">投入金额(持仓成本)</div><div class="v">${fmtM(pos.cost)}</div></div>
-    <div class="stat"><div class="k">当前市值</div><div class="v">${price!=null?fmtM(mkt):"—"}</div></div>
-    <div class="stat"><div class="k">浮动盈亏</div><div class="v ${cls(floatPnl)}">${price!=null?(fmtM(floatPnl)+" ("+fmtP(floatPct)+")"):"—"}</div></div>
+    <div class="stat"><div class="k">当前市值</div><div class="v">${monitor!=null?fmtM(mkt):"—"}</div></div>
+    <div class="stat"><div class="k">浮动盈亏</div><div class="v ${cls(floatPnl)}">${monitor!=null?(fmtM(floatPnl)+" ("+fmtP(floatPct)+")"):"—"}</div></div>
     <div class="stat"><div class="k">已实现盈亏</div><div class="v ${cls(pos.realized)}">${fmtM(pos.realized)}</div></div>`;
 
   // 交易表
@@ -503,7 +510,8 @@ function render(){
   document.getElementById("txEmpty").style.display = txs.length? "none":"block";
   document.getElementById("txCount").textContent = txs.length? `共 ${txs.length} 条记录` : "";
   body.innerHTML = txs.map(t=>{
-    const amt = (Number(t.grams)||0)*(Number(t.price)||0);  // 纯金额，不含手续费
+    // 优先展示用户填入的金额；历史记录无 amount 字段时按 单价×克重 折算兜底
+    const amt = (Number(t.amount)>0) ? Number(t.amount) : (Number(t.grams)||0)*(Number(t.price)||0);
     const fee = Number(t.fee)||0;
     return `<tr>
       <td>${t.date}</td>
@@ -527,12 +535,12 @@ function render(){
   document.getElementById("sSellRatio").value = state.strategy.sellRatio;
   document.getElementById("sPremium").value = state.strategy.premium;
 
-  // 建议
+  // 建议（始终基于国内金价监控）
   const box = document.getElementById("adviceBox");
-  if(price==null){
+  if(monitor==null){
     box.innerHTML = `<div class="advice empty"><div class="lv">等待价格</div><div class="h">先获取或输入金价</div><div class="d">填好交易记录后，给出金价即可获得操作建议。</div></div>`;
   }else{
-    const rec = recommend(price, pos, state.strategy);
+    const rec = recommend(monitor, pos, state.strategy);
     let actionsHtml = rec.actions.map(a=>`<div class="action-chip"><b>${a.b}</b><span>${a.s}</span></div>`).join("");
     let extra = "";
     if(rec.sl!=null){
@@ -545,13 +553,13 @@ function render(){
         <div class="actions">${actionsHtml}</div>
         ${extra}
       </div>`;
-    document.getElementById("adviceTag").textContent = `当前价 ${fmtM(price)} ${unitLabel()}`;
+    document.getElementById("adviceTag").textContent = `当前监控价 ${fmtM(monitor)} 元/克`;
     checkAlert(rec);
   }
 
   // 金字塔
   const pyrBody = document.getElementById("pyrBody");
-  const rows = pyramid(price||pos.avg, pos, state.strategy);
+  const rows = pyramid(monitor||pos.avg, pos, state.strategy);
   if(rows.length===0){
     pyrBody.innerHTML = `<tr><td colspan="5" class="empty-tip">添加交易记录后自动生成补仓计划</td></tr>`;
   }else{
@@ -569,13 +577,19 @@ let lastAlertKey = null;
 let lastPushLevel = null;  // 粗粒度状态（add/hold/act/stop）
 let lastPushTier = 0;     // 已触发的最深补仓档位（0=还没触发任何档位）
 function checkAlert(rec){
-  const price = currentPrice();
+  const b=document.getElementById("banner");
+  // 国际金价仅作展示：不弹横幅、不推送
+  if(state.mode!=="domestic"){
+    b.style.display="none";
+    return;
+  }
+  const price = monitorPrice();
+  if(price==null) return;
   // 本地横幅：止损 / 止盈关键价
   if(rec.sl){
     let key=null, msg="";
     if(price<=rec.sl){ key="sl"; msg=`⚠ 金价已跌破止损线 ${fmtM(rec.sl)}，建议减仓止损`; }
     else if(price>=rec.tp){ key="tp"; msg=`★ 金价已达止盈线 ${fmtM(rec.tp)}，建议分批止盈`; }
-    const b=document.getElementById("banner");
     if(key && key!==lastAlertKey){
       b.textContent=msg; b.style.display="block";
       setTimeout(()=>{b.style.display="none";}, 8000);
@@ -590,6 +604,7 @@ function checkAlert(rec){
 
 // 价格进入 补仓/止盈/止损 等动作态时推送（粗粒度状态切换 + 补仓区逐档位推送）
 function pushIfNeeded(rec, price){
+  if(state.mode!=="domestic") return; // 国际金价仅作展示，绝不触发推送
   const actionable = ["add","act","stop"];
   const lvl = rec.level;
 
@@ -725,7 +740,7 @@ document.getElementById("importCfgFile").addEventListener("change", e=>{
       if(Array.isArray(cfg.transactions)) state.transactions = cfg.transactions.map(t=>({
         id: t.id || ("t"+Date.now().toString(36)+Math.random().toString(36).slice(2,6)),
         date: t.date||"", type: t.type==="sell"?"sell":"buy",
-        price: Number(t.price)||0, grams: Number(t.grams)||0, fee: Number(t.fee)||0
+        price: Number(t.price)||0, grams: Number(t.grams)||0, amount: Number(t.amount)||0, fee: Number(t.fee)||0
       }));
       if(cfg.push) state.push = Object.assign({enabled:false,channel:"serverchan",key:""}, cfg.push);
       const pe=document.getElementById("pushEnabled"); if(pe) pe.checked = !!state.push.enabled;
@@ -786,7 +801,7 @@ document.getElementById("addTx").addEventListener("click", ()=>{
   if(grams>0 && amount<=0) amount = price*grams;           // 克重 → 金额
   const feeRate = type==="buy" ? 0.002 : 0.005;           // 买入0.2% / 卖出0.5%
   const fee = +(amount * feeRate).toFixed(2);
-  state.transactions.push({id:"t"+Date.now()+Math.random().toString(36).slice(2,6),date,type,price,grams:+(+grams).toFixed(4),fee});
+  state.transactions.push({id:"t"+Date.now()+Math.random().toString(36).slice(2,6),date,type,price,grams:+(+grams).toFixed(4),amount:+(+amount).toFixed(2),fee});
   save();
   document.getElementById("tPrice").value=""; document.getElementById("tGrams").value="";
   document.getElementById("tAmount").value=""; document.getElementById("tFee").value="";
@@ -800,10 +815,10 @@ document.getElementById("loadDemo").addEventListener("click", ()=>{
   if(state.transactions.length && !confirm("覆盖为示例数据？")) return;
   const base = state.mode==="domestic" ? 560 : 2350;
   state.transactions = [
-    {id:"d1",date:"2026-03-01",type:"buy",price:base*0.95,grams:10,fee:0},
-    {id:"d2",date:"2026-04-10",type:"buy",price:base*1.0,grams:8,fee:0},
-    {id:"d3",date:"2026-05-20",type:"buy",price:base*1.05,grams:6,fee:0},
-    {id:"d4",date:"2026-06-15",type:"sell",price:base*1.12,grams:5,fee:0}
+    {id:"d1",date:"2026-03-01",type:"buy",price:base*0.95,grams:10,amount:base*0.95*10,fee:0},
+    {id:"d2",date:"2026-04-10",type:"buy",price:base*1.0,grams:8,amount:base*1.0*8,fee:0},
+    {id:"d3",date:"2026-05-20",type:"buy",price:base*1.05,grams:6,amount:base*1.05*6,fee:0},
+    {id:"d4",date:"2026-06-15",type:"sell",price:base*1.12,grams:5,amount:base*1.12*5,fee:0}
   ];
   save(); render();
 });
@@ -941,7 +956,7 @@ document.getElementById("importConfirm").addEventListener("click", ()=>{
       else if(grams>0) amount = price*grams;
       const rate = r.type==="buy" ? 0.002 : 0.005; // 买入0.2% / 卖出0.5%
       const fee = amount>0 ? +(amount*rate).toFixed(2) : (Number(r.fee)||0);
-      state.transactions.push({id:"t"+Date.now()+Math.random().toString(36).slice(2,6),date:r.date,type:r.type,price:Number(r.price),grams:+(+grams).toFixed(4),fee});
+      state.transactions.push({id:"t"+Date.now()+Math.random().toString(36).slice(2,6),date:r.date,type:r.type,price:Number(r.price),grams:+(+grams).toFixed(4),amount:+(+amount).toFixed(2),fee});
       added++;
     }
   });

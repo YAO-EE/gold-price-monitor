@@ -178,21 +178,27 @@ async function sendPush(title, desp, cfg) {
 async function checkOnce(cfg, state) {
   const intl = await fetchIntlPrice();
   const rate = await fetchRate();
-  const price = cfg.mode === "international"
-    ? intl
-    : intlToDomestic(intl, rate, cfg.strategy.premium);
+  // 调仓监控一律锚定国内金价（元/克），与展示模式（国际/国内）无关
+  const price = intlToDomestic(intl, rate, cfg.strategy.premium);
+  const intlUnit = fmtM(intl) + " 美元/盎司";
 
   const pos = computePosition(cfg);
   if (pos.grams <= 0) {
-    console.log(`[${ts()}] 持仓为空，跳过（金价 ${fmtM(price)} 元/克）`);
+    console.log(`[${ts()}] 持仓为空，跳过（国内金价 ${fmtM(price)} 元/克；国际 ${intlUnit}）`);
     return;
   }
 
   const rec = evaluate(price, pos, cfg.strategy);
-  const ACTIONABLE = ["add", "act", "stop"];
-  const unit = cfg.mode === "domestic" ? "元/克" : "美元/盎司";
 
-  console.log(`[${ts()}] 金价 ${fmtM(price)} · 均价 ${fmtM(pos.avg)} · 状态 ${rec.level} · 上次档位 ${state.lastTier}`);
+  // 国际金价仅作展示，不触发任何推送
+  if (cfg.mode !== "domestic") {
+    console.log(`[${ts()}] 国际金价仅作展示（${intlUnit}），不推送；国内金价 ${fmtM(price)} 元/克 · 均价 ${fmtM(pos.avg)} · 状态 ${rec.level}`);
+    return;
+  }
+
+  const ACTIONABLE = ["add", "act", "stop"];
+  const unit = "元/克";
+  console.log(`[${ts()}] 国内金价 ${fmtM(price)} · 均价 ${fmtM(pos.avg)} · 状态 ${rec.level} · 上次档位 ${state.lastTier}`);
 
   // 1) 粗粒度状态切换
   if (ACTIONABLE.includes(rec.level)) {
